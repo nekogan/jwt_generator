@@ -24,24 +24,54 @@ type payload struct {
 }
 
 func (pa *payload) createPayload(n, p, m string) {
+	if len(n) < 3 || len(p) < 3 || len(m) < 3 {
+		log.Fatal("Не корректные данные")
+	}
 	pa.Name = n
 	pa.Pass = p
 	pa.Mail = m
 }
 
 func main() {
+	router := httprouter.New()
+	router.POST("/registration", Index)
+	log.Fatal(http.ListenAndServe(":8080", router))
+}
 
-	// router := httprouter.New()
-	// router.GET("/", Index)
+func createSecret() string {
+	key := make([]byte, 5)
 
-	// log.Fatal(http.ListenAndServe(":8080", router))
+	_, err := rand.Read(key)
+	if err != nil {
+		log.Fatalf("Не удалось создать ключи шифрования: %v\n", err)
+	}
+	return fmt.Sprintf("%x", key)
+}
 
+func Index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	var pl payload
+	err := json.NewDecoder(r.Body).Decode(&pl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	token := createToken(pl)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	jsonResp, err := json.Marshal(token)
+	if err != nil {
+		log.Fatalf("Error happened in JSON marshal. Err: %s", err)
+	}
+	w.Write(jsonResp)
+}
+
+func createToken(pl payload) string {
 	h := header{
 		Alg: "SHA256",
 		Typ: "JWT",
 	}
 
-	var pl payload
 	pl.createPayload("nekogan", "pass", "mail")
 
 	fmt.Printf("Конечный ключ шифрования: %s\n", createSecret())
@@ -70,19 +100,7 @@ func main() {
 
 	token := unsignedToken + "." + fmt.Sprintf("%x", bs)
 
-	fmt.Printf("TOKEN: %v", token)
-}
+	log.Printf("TOKEN: %v\n", token)
 
-func createSecret() string {
-	key := make([]byte, 5)
-
-	_, err := rand.Read(key)
-	if err != nil {
-		log.Fatalf("Не удалось создать ключи шифрования: %v\n", err)
-	}
-	return fmt.Sprintf("%x", key)
-}
-
-func Index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	fmt.Fprint(w, "Welcome!\n")
+	return token
 }
