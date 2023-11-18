@@ -25,7 +25,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+
+	"github.com/julienschmidt/httprouter"
 )
 
 type header struct {
@@ -41,13 +45,32 @@ func (pa *Payload) CreatePayload(body string) {
 	if err := json.Unmarshal([]byte(body), &pa.pl); err != nil {
 		fmt.Printf("Ошибка при конвертации body в json: %v", err)
 	}
-	log.Printf("PAYLOAD IN MAP: %+v", pa.pl)
 }
 
 func main() {
+	router := httprouter.New()
+	router.GET("/", Index)
+	log.Fatal(http.ListenAndServe(":8080", router))
+}
+
+func Index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Fatalln(err)
+	}
 	var pl Payload
-	pl.CreatePayload(`{"login":"apple", "pass":"banana", "mail": "koval_minimu@icloud.com"}`)
-	log.Printf("%+v\n", CreateToken(pl))
+	pl.CreatePayload(string(b))
+	token := CreateToken(pl)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	bj, err := json.MarshalIndent(token, "", "	")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Fprintf(w, "%+v", string(bj))
 }
 
 // Возвращает 'string' случайный ключ для шифрования из 10 символов
