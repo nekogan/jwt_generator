@@ -4,9 +4,9 @@
 Например,
 ```json
 {
-	"login":"apple",
-	"pass":"banana",
-	"mail": "juice"
+    "login": "apple",
+    "pass": "banana",
+    "mail": "juice"
 }
 ```
 При соблюдении данного формата, в response возвращается полностью сгенерированный JWT
