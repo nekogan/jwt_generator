@@ -20,14 +20,13 @@ type header struct {
 	Typ string `json:"type"`
 }
 
-type Payload struct {
-	pl map[string]string
-}
-
-func (pa *Payload) CreatePayload(body string) {
-	if err := json.Unmarshal([]byte(body), &pa.pl); err != nil {
-		fmt.Printf("Ошибка при конвертации body в json: %v", err)
+func CreatePayload(body string) (pl map[string]string, err error) {
+	err = json.Unmarshal([]byte(body), &pl)
+	if err != nil {
+		fmt.Printf("Ошибка при конвертации body в json: %v\n", err)
+		return nil, err
 	}
+	return pl, nil
 }
 
 func main() {
@@ -41,19 +40,31 @@ func Index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	var pl Payload
-	pl.CreatePayload(string(b))
-	token := CreateToken(pl)
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	pl, err := CreatePayload(string(b))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf("Ошибка: %v\n", err)))
+		return
+	}
+
+	token, err := CreateToken(pl)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf("Ошибка: %v\n", err)))
+		return
+	}
 
 	bj, err := json.MarshalIndent(token, "", "	")
 	if err != nil {
-		fmt.Println(err)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf("Ошибка: %v\n", err)))
 		return
 	}
-	fmt.Fprintf(w, "%+v", string(bj))
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(bj)
 }
 
 // Возвращает 'string' случайный ключ для шифрования из 10 символов
@@ -73,7 +84,7 @@ type token struct {
 	Secret string `json:"secret"`
 }
 
-func CreateToken(pl Payload) token {
+func CreateToken(pl map[string]string) (token, error) {
 	h := header{
 		Alg: "SHA512",
 		Typ: "JWT",
@@ -84,11 +95,13 @@ func CreateToken(pl Payload) token {
 	hb, err := json.Marshal(h)
 	if err != nil {
 		log.Fatalf("Конвертация header в json: %v\n", err)
+		return token{}, err
 	}
 
-	pb, err := json.Marshal(pl.pl)
+	pb, err := json.Marshal(pl)
 	if err != nil {
 		log.Fatalf("Конвертация payload в json: %v\n", err)
+		return token{}, err
 	}
 
 	unsignedToken := base64.RawStdEncoding.EncodeToString(hb) + "." + base64.RawStdEncoding.EncodeToString(pb)
@@ -102,5 +115,5 @@ func CreateToken(pl Payload) token {
 	return token{
 		Token:  tokenStr,
 		Secret: base64.RawStdEncoding.EncodeToString(key),
-	}
+	}, nil
 }
